@@ -147,11 +147,16 @@
   laptop) or a richer <strong>state-of-the-art (SOTA)</strong> research profile (survey data, cluster),
   selected by one config knob. See <a data-jump="s-fidelity">Fidelity profiles</a>.</p>
 
-  <div class="note"><strong>How you use it:</strong> the model core, both corridors (Lower
-  Mississippi + Tennessee River), all phases, the policy-lever solvers, and the SOP/SOTA switch run
-  today and pass 108 unit tests. You supply your freight origin&ndash;destination data in the
-  Phase&nbsp;1 input schema; the tool runs on it and returns the modal-split, sensitivity, and
-  policy-lever outputs described below.</div>
+  <div class="note"><strong>How you use it:</strong> you supply your freight data as a
+  <strong>bundle of seven CSV files</strong> (the input contract in <a data-jump="s-data">Data &amp;
+  inputs</a>) &mdash; demand, per-mode OD skims, terminals, locks, commodity bands, behavioral
+  parameters, and your run settings. The tool validates the bundle, runs all phases and the
+  policy-lever solvers, and returns the modal-split, sensitivity, and policy-lever outputs described
+  below. Reliability is modeled <strong>per mode</strong> &mdash; truck, rail, <em>and</em> barge each
+  carry their own transit-time standard deviation &mdash; and you choose how barge reliability is
+  obtained (straight from the skim, or mechanistically from locks + the terminal queue). The model
+  core, all phases, the policy-lever solvers, and the SOP/SOTA switch run today and pass 160 unit
+  tests.</div>
 </section>
 
 <!-- ============ 2. GETTING STARTED ============ -->
@@ -169,11 +174,25 @@ pyarrow&gt;=14   pyyaml&gt;=6     matplotlib&gt;=3.8
 geopandas&gt;=0.14   shapely&gt;=2.0</pre>
   <pre>pip install -r requirements.txt</pre>
 
-  <h3>Run the demo</h3>
+  <h3>Run on your CSV bundle</h3>
+  <p>The primary entry point runs the pipeline on a directory holding the seven input CSVs
+  (the <a data-jump="s-data">Data &amp; inputs</a> contract). A worked example bundle ships in
+  <code>input_data_templates/csv/</code>.</p>
+  <pre>python run_csv_bundle.py --bundle input_data_templates/csv     <span class="c"># load &rarr; validate &rarr; run &rarr; figures</span>
+python run_csv_bundle.py --bundle &lt;dir&gt; --skip-figures          <span class="c"># parquet outputs only</span>
+python run_csv_bundle.py --bundle &lt;dir&gt; --barge-reliability-source direct   <span class="c"># override run_settings.csv</span></pre>
+  <p>It loads + validates the bundle (clear line-level errors on bad input, never a traceback),
+  materializes the demand / skim / reliability frames, then runs
+  Phase&nbsp;3&nbsp;&rarr;&nbsp;4&nbsp;&rarr;&nbsp;5 and the Phase&nbsp;6 policy-lever tables and hero
+  figures. Both barge-reliability modes (<code>direct</code> and <code>mechanistic</code>) run on the
+  example bundle.</p>
+
+  <h3>Run the built-in demo</h3>
   <pre>python run_demo.py                <span class="c"># full pipeline + figures</span>
 python run_demo.py --skip-figures <span class="c"># parquet outputs only</span>
 python run_demo.py --figures-only <span class="c"># re-render figures from existing sweep_results</span></pre>
-  <p>The run logs each phase and finishes in seconds on the demo population. It executes
+  <p>The demo runs the same engine on a small bundled illustrative population and finishes in seconds.
+  It executes
   Phase&nbsp;1&nbsp;&rarr;&nbsp;2&nbsp;&rarr;&nbsp;2.5&nbsp;&rarr;&nbsp;3&nbsp;&rarr;&nbsp;4&nbsp;&rarr;&nbsp;5,
   then the Phase&nbsp;6 policy-lever tables and the hero figures.</p>
 
@@ -188,7 +207,7 @@ python run_demo.py --figures-only <span class="c"># re-render figures from exist
   </table>
 
   <h3>Run the tests</h3>
-  <pre>python -m unittest discover -s tests   <span class="c"># 108 tests</span></pre>
+  <pre>python -m unittest discover -s tests   <span class="c"># 160 tests</span></pre>
 </section>
 
 <!-- ============ 3. CONCEPTS ============ -->
@@ -266,52 +285,58 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
     <h3>Phase 1 — Shipment generation</h3>
     <p><strong>Purpose:</strong> turn disaggregated zone-to-zone commodity flows into a population of
     discrete shipment agents.</p>
-    <p><strong>Inputs:</strong> a disaggregated OD file (<code>origin_taz, destination_taz, sctg2,
-    annual_tons</code>) and <code>commodity_table.csv</code> (per-band payload, value density,
-    time-sensitivity).</p>
+    <p><strong>Inputs:</strong> <code>od_flows.csv</code> (<code>origin_taz, destination_taz, sctg2,
+    annual_tons</code>, plus optional <code>annual_value_usd</code>) and <code>commodity_bands.csv</code>
+    (per-band payload, value density, time-sensitivity, handling type).</p>
     <p><strong>Process:</strong> for each (OD, commodity) the annual tonnage is divided by the band
     payload to get a shipment count; each agent is materialized with jittered payload and value
-    density (deterministic from the RNG seed).</p>
+    density (deterministic from the RNG seed). When <code>annual_value_usd</code> is supplied it sets
+    the flow value directly; otherwise value falls back to <code>annual_tons &times;
+    value_density_per_ton</code>.</p>
     <p><strong>Output — <code>shipments.parquet</code>:</strong> <code>shipment_id, origin_taz,
     destination_taz, sctg2, commodity_band, time_sensitivity, payload_tons, value_density_per_ton,
     value_total</code>.</p>
-    <div class="note">You supply the OD file. The demo ships a small synthetic stand-in; to run on
-    your own flows, provide a <code>fdt</code>/Transearch disaggregate file in this schema — see
+    <div class="note">You supply <code>od_flows.csv</code> as part of the seven-file bundle &mdash; see
     <a data-jump="s-data">Data &amp; inputs</a>.</div>
   </div>
 
   <div class="subpane" id="ph2">
-    <h3>Phase 2 — Multimodal network skim</h3>
-    <p><strong>Purpose:</strong> compute cost and time for truck-only, truck&rarr;barge, and
-    truck&rarr;rail for every OD pair.</p>
-    <p><strong>Inputs:</strong> shipments; per-mile rates, lift fees, speeds, and hub dwells from
-    <code>parameters.yaml&nbsp;&rarr;&nbsp;phase2</code>; a corridor geography.</p>
-    <p><strong>Process:</strong> drayage + line-haul + transfer for each chained alternative; records
-    the lock/event sequence per barge route. Mode availability is suppressed beyond drayage-distance
-    thresholds (barge 150&nbsp;mi, rail 75&nbsp;mi).</p>
-    <p><strong>Output — <code>skim.parquet</code>:</strong> per (OD, mode): distance, time, and a
-    fixed/per-ton cost split.</p>
-    <p><strong>Networks:</strong> the corridor geography is configured for the modeled corridors
-    (Lower Mississippi and Tennessee River).</p>
+    <h3>Phase 2 — Per-mode OD skim</h3>
+    <p><strong>Purpose:</strong> provide cost, time, and reliability for truck, barge, and rail on
+    every OD pair.</p>
+    <p><strong>Inputs:</strong> <code>od_skims.csv</code> &mdash; you supply distance, time, time
+    standard deviation, and the fixed/per-ton cost split directly (three rows per OD pair, one per
+    mode), plus the ordered lock sequence (<code>barge_route_locks</code>) on each barge route.
+    Routing is precomputed and provided as the skim, so no internal network geometry is needed.</p>
+    <p><strong>Process (bundle mode):</strong> the supplied <code>od_skims.csv</code> is mapped
+    straight onto the skim frame Phase&nbsp;3 reads &mdash; including the per-mode <code>time_sd_hr</code>
+    that drives each mode's reliability penalty. A mode marked <code>available = false</code> is
+    removed from the choice set for that OD.</p>
+    <p><strong>Output — <code>skim.parquet</code>:</strong> per (OD, mode): distance, time,
+    <code>time_sd_hr</code>, a fixed/per-ton cost split, and the barge lock sequence.</p>
   </div>
 
   <div class="subpane" id="ph25">
-    <h3>Phase 2.5 — Supply-side reliability</h3>
-    <p><strong>Purpose:</strong> convert congestion and disruption into a barge transit-time
-    <em>mean</em> and <em>standard deviation</em> per route per scenario — the supply&rarr;demand
-    coupling.</p>
-    <p><strong>Mechanisms</strong> (<code>phase25.reliability_mechanism</code>):</p>
+    <h3>Phase 2.5 — Barge reliability</h3>
+    <p><strong>Purpose:</strong> obtain barge transit-time reliability per route per scenario &mdash;
+    the supply&rarr;demand coupling. <strong>You choose the source</strong> via
+    <code>barge_reliability_source</code> in <code>run_settings.csv</code>:</p>
     <ul>
-      <li><code>terminal_queue</code> <em>(default)</em> — analytic M/M/c queue at the hub; congestion
-      wait <code>W&#8474;</code> adds to transit and its SD feeds reliability. Capacity (servers,
-      service rate) is the state-actionable investment lever.</li>
-      <li><code>river_events</code> — lognormal low-water / fog / tow events (Lower Mississippi) or
-      lock-queue delays (Tennessee River), sampled per Monte-Carlo lockage run.</li>
-      <li><code>both</code> — queue + events (means add, variances add).</li>
+      <li><code>direct</code> — barge reliability is read straight from <code>od_skims.time_sd_hr</code>,
+      the same way truck and rail are. No queue or lock computation; the scenario lever does not move
+      barge SD.</li>
+      <li><code>mechanistic</code> — barge SD is computed from <code>locks.csv</code> (per-lock
+      lognormal delay under the chosen scenario) plus the terminal queue at the transshipment hub.
+      The hub is an analytic M/M/c queue built from the <code>intermodal_nodes.csv</code> hub row
+      (<code>servers</code>, <code>service_rate_per_hr</code>) &mdash; capacity is the state-actionable
+      investment lever, so an <code>improved</code> scenario moves barge while truck and rail stay
+      fixed.</li>
     </ul>
     <p><strong>Output — <code>reliability.parquet</code>:</strong> per (barge route, scenario):
-    expected delay, <code>time_barge_mean_hr</code>, <code>time_barge_sd_hr</code>, and a 95th-pct buffer.</p>
-    <p>Delay distributions are drawn from published-literature lognormals and USACE CorpsLocks summaries.</p>
+    expected delay, <code>time_barge_mean_hr</code>, <code>time_barge_sd_hr</code>, and a 95th-pct buffer.
+    In <code>direct</code> mode this frame is inert (barge SD is sourced from the skim instead).</p>
+    <p>Lock delay distributions come from <code>locks.csv</code>; the example bundle's values are drawn
+    from published-literature lognormals and USACE CorpsLocks summaries.</p>
   </div>
 
   <div class="subpane" id="ph3">
@@ -446,15 +471,49 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
 <section class="doc" id="s-data">
   <div class="crumb">Section 6</div>
   <h2 class="title">Data &amp; inputs</h2>
-  <p class="lede">What each phase needs, where it comes from in the SOP vs SOTA path, and how to bring
-  your own data. Full source list: <code>DATA_PATHS.md</code> and white-paper Appendix B.</p>
+  <p class="lede">You supply everything as a seven-file CSV bundle. This section lists the seven files,
+  what each column means, and how the files cross-reference. Full contract:
+  <code>input_data_templates/csv/INPUT_DATA_SPEC.md</code>; data-source provenance:
+  <code>DATA_PATHS.md</code> and white-paper Appendix B.</p>
 
-  <h3>Per-phase sources</h3>
+  <h3>The seven-file bundle</h3>
+  <p>The tool runs entirely from these seven CSVs &mdash; no shapefiles or network routing are required,
+  because travel time and cost are supplied directly as <strong>OD skims</strong>. A worked example
+  (New Orleans&nbsp;&rarr;&nbsp;Memphis, Lower Mississippi) ships in
+  <code>input_data_templates/csv/</code>; replace the rows with your real flows, keeping the headers
+  and types.</p>
+  <table>
+    <tr><th>#</th><th>File</th><th>One row per…</th><th>Feeds</th></tr>
+    <tr><td>1</td><td><code>od_flows.csv</code></td><td>origin &times; destination &times; commodity</td><td>demand (what moves)</td></tr>
+    <tr><td>2</td><td><code>od_skims.csv</code></td><td>origin &times; destination &times; <strong>mode</strong></td><td>time, time SD &amp; cost per mode</td></tr>
+    <tr><td>3</td><td><code>intermodal_nodes.csv</code></td><td>terminal / hub</td><td>transfer cost, dwell, queue capacity</td></tr>
+    <tr><td>4</td><td><code>locks.csv</code></td><td>lock-or-event &times; scenario</td><td>barge reliability (delay)</td></tr>
+    <tr><td>5</td><td><code>commodity_bands.csv</code></td><td>commodity band</td><td>payload, value density, handling</td></tr>
+    <tr><td>6</td><td><code>behavioral_parameters.csv</code></td><td>parameter</td><td>choice-model knobs (VOT, VOR, &theta;, ASCs)</td></tr>
+    <tr><td>7</td><td><code>run_settings.csv</code></td><td>setting</td><td>your run-time choices (e.g. barge reliability source)</td></tr>
+  </table>
+  <p><strong>Per-mode reliability.</strong> <code>od_skims.csv</code> carries a
+  <code>time_sd_hr</code> (transit-time standard deviation) for <em>all three</em> modes &mdash; truck
+  small, rail moderate, barge large. This is what makes each mode pay its own value-of-reliability
+  penalty; rail is no longer treated as perfectly reliable. Truck and rail reliability come only from
+  their <code>time_sd_hr</code>; <strong>barge depends on your <code>barge_reliability_source</code>
+  choice</strong> (see <a data-jump="s-pipeline">Phase&nbsp;2.5</a>).</p>
+  <p><strong>How the files cross-reference (must stay consistent):</strong></p>
+  <ul>
+    <li><code>od_flows</code> origin/destination ids must appear in <code>od_skims</code>.</li>
+    <li>Every <code>sctg2</code> in <code>od_flows</code> falls in exactly one <code>commodity_bands</code> band.</li>
+    <li>Every <code>lock_id</code> in <code>od_skims.barge_route_locks</code> exists in <code>locks.csv</code> and carries all scenarios <code>{baseline, improved, degraded}</code>.</li>
+    <li>Every OD flow pair has skim rows for all three modes.</li>
+  </ul>
+  <p>The runner validates all of this before running and reports clear, line-level errors on bad input
+  &mdash; never a traceback.</p>
+
+  <h3>Per-phase data sources</h3>
   <table>
     <tr><th>Phase</th><th>Input</th><th>SOP source (open data)</th><th>SOTA source (higher-fidelity data)</th></tr>
     <tr><td>1</td><td>County&rarr;TAZ OD flows</td><td>IHS Transearch via the team <code>fdt</code>/RES2019-14 pipeline; open fallback BTS FAF5 county</td><td>SynthFirm firm synthesis</td></tr>
     <tr><td>1</td><td>payload / value density</td><td>Census VIUS 2021; CFS value-per-ton (or Transearch value)</td><td>SynthFirm shipment sizes</td></tr>
-    <tr><td>2</td><td>networks &amp; geometry</td><td>synthetic stylized network</td><td>BTS NTAD + USACE NTAD shapefiles</td></tr>
+    <tr><td>2</td><td>OD skims (distance / time / SD / cost)</td><td>you supply <code>od_skims.csv</code> (routed externally; e.g. on BTS NTAD + USACE NTAD networks)</td><td>same, at higher fidelity</td></tr>
     <tr><td>2</td><td>rates</td><td>ATRI · USACE WCSC · TTI/NWF · USDA AMS · STB Public-Use Waybill · NCFRP 11</td><td>STB Confidential Waybill / tariffs</td></tr>
     <tr><td>2.5</td><td>delay distributions</td><td>published-literature lognormals + USACE CorpsLocks summaries</td><td>raw USACE LPMS; NOAA AIS validation</td></tr>
     <tr><td>3/4</td><td>VOT, VOR, &theta;</td><td>USDOT 2016 · NCHRP 824 · de Jong 2014 / Shams 2017; &theta; swept</td><td>TN primary stated-preference survey</td></tr>
@@ -473,12 +532,17 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
   barge figure is <strong>USACE WCSC reported tonnage</strong>. (Current series FAF5.7.1; FAF6 ~mid-2026.)</p>
 
   <h3>Bring your own data</h3>
-  <p>The Phase-1 input contract is small and stable:
-  <code>origin_taz, destination_taz, sctg2, annual_tons</code> (+ optional value). To run on real flows
-  today you transform your file to that schema and point <code>phase1.disagg_outputs_path</code> at it.</p>
-  <p>The <code>fdt</code>/Transearch output maps directly onto that schema
-  (<code>origin_taz, destination_taz, sctg_2d, co_mode, tons, valuee</code>); supply your corridor
-  file with barge lanes and the tool runs on your data.</p>
+  <p>Assemble the seven CSVs in one directory (copy the example bundle in
+  <code>input_data_templates/csv/</code> and replace the rows), then run
+  <code>python run_csv_bundle.py --bundle &lt;dir&gt;</code> &mdash; or, in the dashboard, upload the bundle
+  as a ZIP (or the seven files individually). The <code>fdt</code>/Transearch output maps directly onto
+  <code>od_flows.csv</code> (<code>origin_taz, destination_taz, sctg_2d, co_mode, tons, valuee</code>);
+  route your corridor to fill <code>od_skims.csv</code>, then run on your data.</p>
+
+  <h3>Future work</h3>
+  <p>A network / shapefile skim-estimation component &mdash; supply nodes and links as shapefiles and
+  the tool estimates the OD skims by routing &mdash; is <strong>planned but not yet built</strong>. For
+  now the OD skims are a required CSV input.</p>
 </section>
 
 <!-- ============ 7. OUTPUTS ============ -->
