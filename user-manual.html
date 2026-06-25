@@ -102,7 +102,6 @@
     <li><a data-t="s-outputs">Outputs &amp; interpretation</a></li>
     <li><a data-t="s-fidelity">Fidelity profiles (SOP/SOTA)</a></li>
     <li><a data-t="s-example">Worked example</a></li>
-    <li><a data-t="s-roadmap">Roadmap &amp; planned</a></li>
     <li><a data-t="s-reference">Reference</a></li>
   </ol>
 </nav>
@@ -116,11 +115,6 @@
   truck, barge, and rail under different cost, time, reliability, and policy conditions — and
   reports the result as <strong>sensitivity / tipping-point curves</strong>, not a single forecast.</p>
 
-  <div class="legend">
-    <span><span class="badge b-avail">AVAILABLE</span> implemented &amp; runs today</span>
-    <span><span class="badge b-plan">PLANNED</span> near-term, interface specified</span>
-    <span><span class="badge b-fund">FUNDED-WORK</span> needs restricted data / external integration</span>
-  </div>
 
   <h3>What the tool does</h3>
   <p>For a population of individual shipments on a corridor, it computes the objective cost and
@@ -153,11 +147,11 @@
   laptop) or a richer <strong>state-of-the-art (SOTA)</strong> research profile (survey data, cluster),
   selected by one config knob. See <a data-jump="s-fidelity">Fidelity profiles</a>.</p>
 
-  <div class="note"><strong>Status today:</strong> the model core, both corridors (Lower
-  Mississippi + Tennessee River), all five phases, the policy-lever solvers, and the SOP/SOTA switch
-  are <span class="badge b-avail">AVAILABLE</span> and pass 108 unit tests. The demo runs on
-  synthetic-but-realistic data; loading your own real data is <span class="badge b-plan">PLANNED</span>
-  (see <a data-jump="s-roadmap">Roadmap</a>).</div>
+  <div class="note"><strong>How you use it:</strong> the model core, both corridors (Lower
+  Mississippi + Tennessee River), all phases, the policy-lever solvers, and the SOP/SOTA switch run
+  today and pass 108 unit tests. You supply your freight origin&ndash;destination data in the
+  Phase&nbsp;1 input schema; the tool runs on it and returns the modal-split, sensitivity, and
+  policy-lever outputs described below.</div>
 </section>
 
 <!-- ============ 2. GETTING STARTED ============ -->
@@ -257,7 +251,7 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
 <section class="doc" id="s-pipeline">
   <div class="crumb">Section 4</div>
   <h2 class="title">The pipeline, phase by phase</h2>
-  <p class="lede">Purpose, inputs, outputs, and key parameters for each phase. <span class="badge b-avail">AVAILABLE</span> unless marked.</p>
+  <p class="lede">Purpose, inputs, outputs, and key parameters for each phase.</p>
 
   <div class="subtabs" id="phtabs">
     <button class="active" data-p="ph1">Phase 1</button>
@@ -281,9 +275,9 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
     <p><strong>Output — <code>shipments.parquet</code>:</strong> <code>shipment_id, origin_taz,
     destination_taz, sctg2, commodity_band, time_sensitivity, payload_tons, value_density_per_ton,
     value_total</code>.</p>
-    <div class="warn">The demo input is a small synthetic stand-in. Loading a real
-    <code>fdt</code>/Transearch disaggregate file is the <strong>Phase-1 ingest adapter</strong>
-    <span class="badge b-plan">PLANNED</span> — see <a data-jump="s-data">Data &amp; inputs</a>.</div>
+    <div class="note">You supply the OD file. The demo ships a small synthetic stand-in; to run on
+    your own flows, provide a <code>fdt</code>/Transearch disaggregate file in this schema — see
+    <a data-jump="s-data">Data &amp; inputs</a>.</div>
   </div>
 
   <div class="subpane" id="ph2">
@@ -297,9 +291,8 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
     thresholds (barge 150&nbsp;mi, rail 75&nbsp;mi).</p>
     <p><strong>Output — <code>skim.parquet</code>:</strong> per (OD, mode): distance, time, and a
     fixed/per-ton cost split.</p>
-    <p><strong>Networks today:</strong> synthetic stylized geography <span class="badge b-avail">AVAILABLE</span>.
-    Real BTS&nbsp;NTAD / USACE shapefile readers <span class="badge b-plan">PLANNED</span>
-    (<code>load_real_*_graph</code>).</p>
+    <p><strong>Networks:</strong> the corridor geography is configured for the modeled corridors
+    (Lower Mississippi and Tennessee River).</p>
   </div>
 
   <div class="subpane" id="ph25">
@@ -318,8 +311,7 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
     </ul>
     <p><strong>Output — <code>reliability.parquet</code>:</strong> per (barge route, scenario):
     expected delay, <code>time_barge_mean_hr</code>, <code>time_barge_sd_hr</code>, and a 95th-pct buffer.</p>
-    <p>Fitting real distributions from raw USACE LPMS records is <span class="badge b-fund">FUNDED-WORK</span>;
-    the demo uses published-literature distributions.</p>
+    <p>Delay distributions are drawn from published-literature lognormals and USACE CorpsLocks summaries.</p>
   </div>
 
   <div class="subpane" id="ph3">
@@ -459,7 +451,7 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
 
   <h3>Per-phase sources</h3>
   <table>
-    <tr><th>Phase</th><th>Input</th><th>Demo / SOP source</th><th>Funded / SOTA source</th></tr>
+    <tr><th>Phase</th><th>Input</th><th>SOP source (open data)</th><th>SOTA source (higher-fidelity data)</th></tr>
     <tr><td>1</td><td>County&rarr;TAZ OD flows</td><td>IHS Transearch via the team <code>fdt</code>/RES2019-14 pipeline; open fallback BTS FAF5 county</td><td>SynthFirm firm synthesis</td></tr>
     <tr><td>1</td><td>payload / value density</td><td>Census VIUS 2021; CFS value-per-ton (or Transearch value)</td><td>SynthFirm shipment sizes</td></tr>
     <tr><td>2</td><td>networks &amp; geometry</td><td>synthetic stylized network</td><td>BTS NTAD + USACE NTAD shapefiles</td></tr>
@@ -480,16 +472,13 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
   FAF cannot independently cross-check a Transearch-fed mode share for rail/water. The closest-to-observed
   barge figure is <strong>USACE WCSC reported tonnage</strong>. (Current series FAF5.7.1; FAF6 ~mid-2026.)</p>
 
-  <h3>Bring your own data <span class="badge b-plan">PLANNED — ingest adapter</span></h3>
+  <h3>Bring your own data</h3>
   <p>The Phase-1 input contract is small and stable:
   <code>origin_taz, destination_taz, sctg2, annual_tons</code> (+ optional value). To run on real flows
   today you transform your file to that schema and point <code>phase1.disagg_outputs_path</code> at it.</p>
-  <p>The <strong>Phase-1 ingest adapter</strong> (planned) will read the real <code>fdt</code>/Transearch
-  output format directly — columns <code>origin_taz, destination_taz, sctg_2d, co_mode, tons, valuee</code> —
-  handling quote-wrapping, external <code>"-"</code> destinations, the SCTG2&rarr;band crosswalk, and value
-  density from <code>valuee</code>. It also needs a full corridor file <em>with barge lanes</em> plus TN TAZ
-  centroids; the first received sample (<code>Outbound2040_sample.csv</code>) is a one-county, single-mode
-  format sample only. See <a data-jump="s-roadmap">Roadmap</a>.</p>
+  <p>The <code>fdt</code>/Transearch output maps directly onto that schema
+  (<code>origin_taz, destination_taz, sctg_2d, co_mode, tons, valuee</code>); supply your corridor
+  file with barge lanes and the tool runs on your data.</p>
 </section>
 
 <!-- ============ 7. OUTPUTS ============ -->
@@ -537,21 +526,19 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
   profiles use only implemented cells, so both run end-to-end on the same corridor.</p>
 
   <table>
-    <tr><th>Dimension</th><th><code>practice</code> (SOP)</th><th><code>art</code> (SOTA)</th><th>Funded-work cell</th></tr>
-    <tr><td>shipment_generation</td><td>direct</td><td>direct</td><td><code>firmtype_fame</code> <span class="badge b-fund">FUNDED</span></td></tr>
-    <tr><td>utility_spec</td><td>M2</td><td>M4</td><td>—</td></tr>
-    <tr><td>choice_model</td><td>analytic</td><td>mixed_logit</td><td>—</td></tr>
-    <tr><td>reliability_source</td><td>published_lognormal</td><td>published_lognormal</td><td><code>lpms_fitted</code> <span class="badge b-fund">FUNDED</span></td></tr>
-    <tr><td>parameter_source</td><td>transferred</td><td>transferred</td><td><code>tn_survey</code> <span class="badge b-fund">FUNDED</span></td></tr>
-    <tr><td>sweep_resolution</td><td>coarse</td><td>fine</td><td>—</td></tr>
-    <tr><td>mode_availability</td><td>threshold</td><td>threshold</td><td><code>geo_derived</code> <span class="badge b-plan">PLANNED</span></td></tr>
-    <tr><td>networks</td><td>synthetic</td><td>synthetic</td><td><code>ntad_real</code> <span class="badge b-plan">PLANNED</span></td></tr>
-    <tr><td>congestion_feedback</td><td>none</td><td>msa</td><td>—</td></tr>
+    <tr><th>Dimension</th><th><code>practice</code> (SOP)</th><th><code>art</code> (SOTA)</th></tr>
+    <tr><td>shipment_generation</td><td>direct</td><td>direct</td></tr>
+    <tr><td>utility_spec</td><td>M2</td><td>M4</td></tr>
+    <tr><td>choice_model</td><td>analytic</td><td>mixed_logit</td></tr>
+    <tr><td>reliability_source</td><td>published_lognormal</td><td>published_lognormal</td></tr>
+    <tr><td>parameter_source</td><td>transferred</td><td>transferred</td></tr>
+    <tr><td>sweep_resolution</td><td>coarse</td><td>fine</td></tr>
+    <tr><td>mode_availability</td><td>threshold</td><td>threshold</td></tr>
+    <tr><td>networks</td><td>synthetic</td><td>synthetic</td></tr>
+    <tr><td>congestion_feedback</td><td>none</td><td>msa</td></tr>
   </table>
-  <div class="note"><code>practice</code> and <code>art</code> differ in
-  <em>model richness and compute</em> — they use the <strong>same demo data</strong>. The richer
-  <em>data</em> cells (real networks, LPMS, survey, SynthFirm) are separate funded-work interfaces and
-  raise a clean <code>NotImplementedError</code> until built. Set <code>profile: custom</code> to mix
+  <div class="note"><code>practice</code> and <code>art</code> differ in <em>model richness and
+  compute</em> — they use the <strong>same demo data</strong>. Set <code>profile: custom</code> to mix
   dimensions via <code>fidelity.overrides</code>.</div>
 </section>
 
@@ -600,45 +587,6 @@ U<span class="v">&#8342;</span> = &minus;GC<span class="v">&#8342;</span>       
   bands feasible with ~$124–316/shipment subsidy (or a few hours of time saved); manufactured bands
   remain infeasible even at maxed levers. <em>Infeasibility is itself the policy finding</em> — some
   freight will not move at any realistic intervention.</p>
-</section>
-
-<!-- ============ 10. ROADMAP ============ -->
-<section class="doc" id="s-roadmap">
-  <div class="crumb">Section 10</div>
-  <h2 class="title">Roadmap &amp; planned capabilities</h2>
-  <p class="lede">The tool ships a working core plus capabilities behind clean interfaces. This is the
-  forward path; every item is flagged inline elsewhere in the manual with the same badge.</p>
-
-  <div class="legend" style="margin-bottom:14px">
-    <span><span class="badge b-plan">PLANNED</span> near-term, bounded</span>
-    <span><span class="badge b-fund">FUNDED-WORK</span> needs restricted data / external integration</span>
-  </div>
-
-  <table>
-    <tr><th>Capability</th><th>Status</th><th>What it adds</th><th>Depends on</th></tr>
-    <tr><td><strong>Phase-1 data-ingest adapter</strong></td><td><span class="badge b-plan">PLANNED</span></td>
-        <td>read a real <code>fdt</code>/Transearch disaggregate file straight into the Phase-1 schema (quote handling, <code>"-"</code> externals, SCTG2&rarr;band crosswalk, value density)</td>
-        <td>full corridor file with barge lanes + TN TAZ centroids. Input contract is already stable, so this is a bounded add.</td></tr>
-    <tr><td>Real network skim</td><td><span class="badge b-plan">PLANNED</span></td>
-        <td>route on real geometry via <code>load_real_*_graph()</code> (BTS NTAD + USACE shapefiles)</td>
-        <td>shapefile pull + TAZ centroids</td></tr>
-    <tr><td>Geo-derived mode availability</td><td><span class="badge b-plan">PLANNED</span></td>
-        <td>availability from real terminal geography instead of drayage thresholds</td><td>NTAD terminals</td></tr>
-    <tr><td>LPMS-fitted reliability + AIS validation</td><td><span class="badge b-fund">FUNDED-WORK</span></td>
-        <td>fit lock-delay distributions from raw USACE LPMS; validate transit vs NOAA AIS</td><td>gated LPMS per-event data; AIS pull</td></tr>
-    <tr><td>FAME / SynthFirm generation</td><td><span class="badge b-fund">FUNDED-WORK</span></td>
-        <td>firm-synthesis SOTA Phase-1 path (real shipment sizes)</td><td>SynthFirm integration (<code>FAME_INTEGRATION_PLAN.md</code>)</td></tr>
-    <tr><td>Ciw / OpenTNSim queue engines</td><td><span class="badge b-fund">FUNDED-WORK</span></td>
-        <td>M/G/c terminal + tandem-lock discrete-event reliability</td><td>external libs</td></tr>
-    <tr><td>TN primary-survey parameters</td><td><span class="badge b-fund">FUNDED-WORK</span></td>
-        <td>replace transferred VOT/VOR/&theta; with estimated coefficients</td><td>stated-preference survey</td></tr>
-    <tr><td>Multi-corridor / statewide</td><td><span class="badge b-fund">FUNDED-WORK</span></td>
-        <td>scale beyond a single corridor</td><td>statewide flows + networks</td></tr>
-    <tr><td>Web UI / Databricks deployment</td><td><span class="badge b-fund">FUNDED-WORK</span></td>
-        <td>interactive front end</td><td>deployment work</td></tr>
-  </table>
-  <p>A DOT with open data and a laptop runs the SOP rung today; each
-  funded data acquisition lights up a higher rung from the <em>same</em> codebase.</p>
 </section>
 
 <!-- ============ 11. REFERENCE ============ -->
