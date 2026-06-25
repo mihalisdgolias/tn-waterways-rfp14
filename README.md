@@ -21,4 +21,3 @@ Both `index.html` and `user-manual.html` are **fully self-contained** (all image
 ## Notes
 - Project: TDOT RFP-14. Budget $299,900. Duration 30 months (27 research + 3 review/approval). Six tasks.
 - Team: PI Donald Maier (UTK); Co-PIs Jeffrey Trombly, Andy Balthrop (UTK), Mihalis Golias, David Arnold (IAMPE). TDOT lead staff: Daniel Pallme & Drew Daruka.
-# tn-waterways-rfp14
